@@ -39,7 +39,8 @@ io.on("connection", (socket) => {
   //           "system" -> "<nickname> הצטרפה לצ'אט"   and   "users" -> [all nicknames]
 
   socket.on("join", (nickname, callback) => {
-    if (nickname.length === 0) {
+const cleanNickname = nickname.trim();
+    if (cleanNickname.length === 0) {
       callback({
         ok: false,
         error: "חובה להזין כינוי",
@@ -47,7 +48,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (arr.includes(nickname)) {
+    if (arr.includes(cleanNickname)) {
       callback({
         ok: false,
         error: "הכינוי כבר תפוס",
@@ -55,15 +56,15 @@ io.on("connection", (socket) => {
       return;
     }
 
-    arr.push(nickname);
+    arr.push(cleanNickname);
 
     callback({
       ok: true,
     });
 
-    io.emit("system", `${nickname} הצטרפה לצ'אט`);
+    io.emit("system", `${cleanNickname} הצטרפה לצ'אט`);
     io.emit("users", arr);
-    socket.data.nickname = nickname;
+    socket.data.nickname = cleanNickname;
 
     // Step 3: "chat:message" (text) -> send to everyone: "chat:message" -> { nickname, text, time }
     socket.on("chat:message", (text) => {
