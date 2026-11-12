@@ -5,17 +5,98 @@
 // Step 1: an express app that serves the "public" folder,
 //         an http server made from the app, a Socket.io server attached to it, and listen(3000).
 //         On every connection print:  User connected: <socket.id>
+const express = require("express");
+const path = require("path");
+const app = express();
+const http = require("http");
 
-// Step 2: "join" (nickname, callback)
-//         - empty nickname      -> callback({ ok: false, error: "חובה להזין כינוי" })
-//         - nickname is taken   -> callback({ ok: false, error: "הכינוי כבר תפוס" })
-//         - otherwise save it, callback({ ok: true }), and send to everyone:
-//           "system" -> "<nickname> הצטרפה לצ'אט"   and   "users" -> [all nicknames]
+// הגדרת תיקיית public כתיקייה לקבצים סטטיים
+app.use(express.static(path.join(__dirname, "public")));
+const { Server } = require("socket.io");
+const server = http.createServer(app);
+const io = new Server(server);
 
-// Step 3: "chat:message" (text) -> send to everyone: "chat:message" -> { nickname, text, time }
+server.listen(3000);
+const arr = [];
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+  // Step 5
+  socket.on("disconnect", () => {
+    console.log("הלקוח התנתק");
+    const nickname = socket.data.nickname;
+    if (!nickname) {
+      return;
+    }
+    arr.splice(arr.indexOf(socket.data.nickname), 1);
+    io.emit("system", `${socket.data.nickname} עזבה את הצ'אט`);
+    io.emit("users", arr);
+  });
 
-// Step 4: "typing" -> send to everyone except the sender: "typing" -> nickname
+  // Step 2: "join" (nickname, callback)
+  //         - empty nickname      -> callback({ ok: false, error: "חובה להזין כינוי" })
+  //         - nickname is taken   -> callback({ ok: false, error: "הכינוי כבר תפוס" })
+  //         - otherwise save it, callback({ ok: true }), and send to everyone:
+  //           "system" -> "<nickname> הצטרפה לצ'אט"   and   "users" -> [all nicknames]
 
+  socket.on("join", (nickname, callback) => {
+    if (nickname.length === 0) {
+      callback({
+        ok: false,
+        error: "חובה להזין כינוי",
+      });
+      return;
+    }
+
+    if (arr.includes(nickname)) {
+      callback({
+        ok: false,
+        error: "הכינוי כבר תפוס",
+      });
+      return;
+    }
+
+    arr.push(nickname);
+
+    callback({
+      ok: true,
+    });
+
+    io.emit("system", `${nickname} הצטרפה לצ'אט`);
+    io.emit("users", arr);
+    socket.data.nickname = nickname;
+
+    // Step 3: "chat:message" (text) -> send to everyone: "chat:message" -> { nickname, text, time }
+    socket.on("chat:message", (text) => {
+      if (!socket.data.nickname) {
+        return;
+      }
+
+      const cleanText = text.trim();
+
+      if (cleanText.length === 0) {
+        return;
+      }
+
+      const message = {
+        nickname: socket.data.nickname,
+        text: cleanText,
+        time: new Date().toISOString(),
+      };
+
+      // שליחת ההודעה לכל המשתמשים
+      io.emit("chat:message", message);
+    });
+
+    // Step 4: "typing" -> send to everyone except the sender: "typing" -> nickname
+    socket.on("typing", () => {
+      if (!socket.data.nickname) {
+        return;
+      }
+
+      socket.broadcast.emit("typing", socket.data.nickname);
+    });
+  });
+});
 // Step 5: "disconnect" -> send to everyone: "system" -> "<nickname> עזבה את הצ'אט"  and  "users"
 
 // Bonus: GET /api/messages -> the last 20 chat messages
